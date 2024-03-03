@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Traffic Incidents</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.1/font/bootstrap-icons.css">
+
+    <!-- Mapquest script and stylesheet -->
+    <script src="https://api.mqcdn.com/sdk/mapquest-js/v1.3.2/mapquest.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://api.mqcdn.com/sdk/mapquest-js/v1.3.2/mapquest.css" />
+
+    <script>
+        // json with 5 cities name and coordinates
+        const cities = [
+            {
+                name: "New York",
+                latitude: 40.71,
+                longitude: -74.00
+            },
+            {
+                name: "Los Angeles",
+                latitude: 34.05,
+                longitude: -118.24
+            },
+            {
+                name: "Chicago",
+                latitude: 41.85,
+                longitude: -87.65
+            },
+            {
+                name: "Seattle",
+                latitude: 47.60,
+                longitude: -122.33
+            },
+            {
+                name: "Washington DC",
+                latitude: 38.89,
+                longitude: -77.03
+            }
+        ];
+
+        //load cities data in a hidden table
+        function loadCities() {
+            var k = '<tbody>'
+            for (i = 0; i < cities.length; i++) {
+                k += '<tr>';
+
+                k += '<input type="hidden" width="12%" value="' + cities[i].name + '"></input>';
+
+                k += '<input type="hidden" width="12%" value="' + cities[i].latitude + '"></input>';
+                k += '<input type="hidden" width="12%" value="' + cities[i].longitude + '"></input>';
+
+                k += '</tr>';
+            }
+            k += '</tbody>';
+            document.getElementById('tableData').innerHTML = k;
+        }
+
+        //load cities as options in a select tag element
+        function createCitiesOption() {
+            loadCities();
+            selector = document.getElementById('citiesSelector');
+            var k = '';
+            for (i = 0; i < cities.length; i++) {
+                k += '<option value="' + i + '">' + cities[i].name + '</option>';
+            }
+            selector.innerHTML = k;
+        }
+
+        //load a map centered on the given coordinates
+        function loadMap(lat, long) {
+            document.getElementById('incidentsMap').innerHTML = "<div id='map' style='width: 100%; height: 100%;'></div>";
+            L.mapquest.key = 'JyCJLbutuwoGGu7QhK8t4w10HTXWcJsE';
+
+            // 'map' refers to a <div> element with the ID map
+            return L.mapquest.map('map', {
+                center: [lat, long],
+                // L.mapquest.tileLayer('map') is the MapQuest map tile layer
+                layers: L.mapquest.tileLayer('map'),
+                zoom: 11
+            });
+        }
+
+        //update page with new information after a city is selected
+        function selectCity() {
+            const xhttp = new XMLHttpRequest();
+            city = cities[document.getElementById("citiesSelector").value]; //get the selected city name
+            map = loadMap(city.latitude, city.longitude); //load map on selected city
+
+            // required coordinates
+            var lat1 = city.latitude - 0.22;
+            var long1 = city.longitude - 0.22;
+            var lat2 = city.latitude + 0.22;
+            var long2 = city.longitude + 0.22;
+
+            //start connection to the mapquest API
+            xhttp.open('GET', 'http://www.mapquestapi.com/traffic/v2/incidents?key=JyCJLbutuwoGGu7QhK8t4w10HTXWcJsE&boundingBox='
+                + lat1 + ',' + long1 + ',' + lat2 + ',' + long2
+                + '&filters=construction,incidents');
+
+            xhttp.onreadystatechange = function () {
+                if (this.readyState == 4 && this.status == 200) {
+                    //get the online data
+                    myJson = JSON.parse(this.responseText);
+                    let incidents = myJson.incidents;
+
+                    // it happens that more incidents have the exact same coordinates
+                    // soo for every place where there is more than one incident
+                    // the map shows a more "severe" marker
+
+                    //keep track if a place already has an incident
+                    var lookup = [];
+                    //check if a point on the map is free of incidents
+                    function isLocationFree(search) {
+                        for (var i = 0, l = lookup.length; i < l; i++) {
+                            if (lookup[i][0] === search[0] && lookup[i][1] === search[1]) {
+                            return false;
+                            }
+                        }
+                        return true;
+                        }
+
+                    //create table head for the incidents list
+                    k = '<thead class="thead-dark">';
+                    k+=' <tr> <th scope="col" style=" position: -webkit-sticky; position: sticky;top: 0;z-index: 2;" >#</th> '
+                    k+=' <th scope="col" style=" position: -webkit-sticky; position: sticky;top: 0;z-index: 2;">Adress</th> </tr>';
+                    k+=' </thead>'
+
+                    k += '<tbody  >';
+
+                    index = 1;
+
+                    //insert each incident in the table and on the map
+                    incidents.forEach(element => {
+                        k += '<tr>';
+                        k += '<th scope="row">' + index + '</td>';
+                        k += '<td>' + element.shortDesc + '</td>';
+                        k += '</tr>';
+                        //for the free of incidents coordinates mark the map with a yellow marker
+                        if(isLocationFree([element.lat, element.lng]))
+                            {
+                                L.marker([element.lat, element.lng], {
+                                icon: L.mapquest.icons.incident({
+                                    shadow: true,
+                                    size: 'sm'
+                                    })
+                                }).addTo(map)
+                                lookup.push([element.lat, element.lng]);
+                            }
+                        //for more than one incident in a place mark the map with a red marker
+                        else{
+                            L.marker([element.lat, element.lng], {
+                                icon: L.mapquest.icons.incident({
+                                    shadow: true,
+                                    size: 'sm',
+                                    severity: 'medium'
+                                    })
+                                }).addTo(map)
+                        }
+
+                        index += 1;
+                    });
+
+                    k += '</tbody>';
+                    document.getElementById("incidents").innerHTML = k;
+
+                }
+            }
+            xhttp.send();
+        }
+
+    </script>
+
+</head>
+
+<body onload="createCitiesOption()">
+    <!-- hidden table with cities coordinates -->
+    <table>
+        <thead>
+            <tr>
+                <input type="hidden" width="12%" value="City"></input>
+                <input type="hidden" width="12%" value="Lat"></input>
+                <input type="hidden" width="12%" value="Long"></input>
+            </tr>
+        </thead>
+        <tbody id="tableData">
+            <!-- content loaded in loadCities() -->
+        </tbody>
+    </table>
+
+
+
+
+    <div class="container vh-100">
+        <div class="row h-100 p-4 ">
+
+            <div class="col-sm ">
+
+                <!-- greeting text and usage explanation -->
+                <h4>Traffic Incidents </h4>
+                <p>Choose a city and press select to show the map and a list of traffic incidents in that area:</p>
+
+
+
+
+                <script>
+                function con(){
+                        fs = document.getElementById('firstString').toString();
+                        fs+=  document.getElementById('secondString').toString();
+                        document.getElementById("result").innerHTML = fs;
+                      }
+                </script>
+
+                <form>
+                    unuuuu<input type="text" id="firstString"/>
+                    dooooiiii<input type="text" id="secondString"/>
+                    <input type="button" onClick="con()"/>
+                </form>
+                <p> result: <span id="result"></span></p>
+
+
+
+
+
+
+
+                <div  class="input-group">
+                    <select class="custom-select" name="citiesSelector" id="citiesSelector">
+                        <!-- cities options loaded in createCitiesOption()-->
+                    </select>
+                    <div class="input-group-append">
+                        <!-- triggers the updating of the page with information about the selected city option -->
+                        <button class="btn btn-dark" onclick="selectCity()">Select</button>
+                    </div>
+                </div>
+                <div id="incidentsMap" style="width: 100%; height: 530px;">
+                    <!-- show a map with incidents after selecting a city  -->
+                </div>
+
+            </div>
+
+            <div class="col-sm h-100 ">
+                <div style="overflow-y:auto; height :100%">
+                    <table class="table" id="incidents" >
+                        <!-- show list of incidents loaded in selectCity()-->
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- jquery script -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <!-- bootstrap script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+
+</body>
+
+  <!-- Footer  -->
+  <footer class="bg-light  p-2">
+
+    <div class="footer-copyright text-center">
+        <h6 style="font-size: 12px;"> 5CCS2INS – Internet Systems Coursework 3</h6>
+
+        <p style="font-size: 12px;">
+            <i class="bi bi-envelope"></i> Contact: k20037673@kcl.ac.uk
+        </p>
+        <p style="font-size: 10px;"> © 2021 Created by: Dariana Dorin</p>
+    </div>
+
+  </footer>
+
+</html>
